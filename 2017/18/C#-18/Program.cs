@@ -2,11 +2,11 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
-using static C__18.Program;
+using static C__18.Runner;
 
 namespace C__18
 {
-    class Program
+    class Runner
     {
         static void Main(string[] args)
         {
@@ -54,13 +54,13 @@ namespace C__18
             var split = line.Split(" ");
             switch (split[0])
             {
-                case "snd": return new SoundInst(new ValueReference(split[1]));
+                case "snd": return new SendInst(new ValueReference(split[1]));
                 case "set": return new SetInst(split[1][0], new ValueReference(split[2]));
                 case "add": return new AddInst(split[1][0], new ValueReference(split[2]));
                 case "mul": return new MultInst(split[1][0], new ValueReference(split[2]));
                 case "mod": return new ModInst(split[1][0], new ValueReference(split[2]));
                 case "rcv": return new RecInst(split[1][0]);
-                case "jgz": return new JumpInst(split[1][0], new ValueReference(split[2]));
+                case "jgz": return new JumpInst(new ValueReference(split[1]), new ValueReference(split[2]));
                 default: throw new Exception("Invalid instruction: " + line);
             }
         }
@@ -72,25 +72,34 @@ namespace C__18
             var data = input.Where(l => !string.IsNullOrWhiteSpace(l)).Select(l => Parse(l)).ToArray();
             _shouldLogToConsole = logToConsole;
 
-            var synth = new Synth(data);
-            while (!synth.IsFinished)
+            var program1ReadQueue = new Queue<long>();
+            var program2ReadQueue = new Queue<long>();
+            var program0 = new Program(0, data, program1ReadQueue, program2ReadQueue);
+            var program1 = new Program(1, data, program2ReadQueue, program1ReadQueue);
+            while (!(program0.IsFinished && program1.IsFinished))
             {
-                var instruction = synth.TakeOneStep();
-                if (instruction is RecInst recaller && recaller.RecalledValue.HasValue)
+                program0.TakeOneStep();
+                program1.TakeOneStep();
+                if (program0.IsWaiting && !program0.ReadQueue.Any() && program1.IsWaiting && !program1.ReadQueue.Any())
                 {
-                    Console.WriteLine("Recalled value is: " + recaller.RecalledValue.Value);
+                    Console.WriteLine("Deadlocked");
                     break;
                 }
             }
+            Console.WriteLine($"Program 1 sent data {program1.CountOfSendOperations} times.");
         }
     }
 
-    public class Synth
+    public class Program
     {
-        public Synth(IInstruction[] instructions)
+        public Program(long programId, IInstruction[] instructions, Queue<long> readQueue, Queue<long> sendQueue)
         {
+            this.ProgramId = programId;
             this.Instructions = instructions;
             this.Registers = new Dictionary<char, long>();
+            this.SetRegisterValue('p', programId);
+            this.ReadQueue = readQueue;
+            this.SendQueue = sendQueue;
         }
 
         public long GetRegisterValue(char key)
@@ -111,25 +120,52 @@ namespace C__18
         }
 
         private Dictionary<char, long> Registers { get; set; }
+        public long ProgramId { get; }
         public IInstruction[] Instructions { get; set; }
         public long LastFrequencyPlayed { get; set; }
         public long CurrentIndex { get; set; } = 0;
         public bool IsFinished => CurrentIndex < 0 || CurrentIndex >= Instructions.Length;
-        public void Play(long frequency)
+        public bool IsWaiting { get; set; }
+        public long CountOfSendOperations { get; set; }
+        public Queue<long> ReadQueue { get; }
+        public Queue<long> SendQueue { get; }
+
+        public void Send(long value)
         {
-            LastFrequencyPlayed = frequency;
+            CountOfSendOperations++;
+            SendQueue.Enqueue(value);
         }
 
-        public IInstruction TakeOneStep()
+        public long? Read()
         {
+            if (ReadQueue.Any())
+            {
+                return ReadQueue.Dequeue();
+            }
+            else
+            {
+                return null;
+            }
+        }
+
+        public void TakeOneStep()
+        {
+            if (IsFinished)
+            {
+                return;
+            }
+            if (IsWaiting && ReadQueue.Any())
+            {
+                IsWaiting = false;
+            }
             var currentInstruction = Instructions[CurrentIndex];
+            Log($"{ProgramId}: {currentInstruction.GetType().Name}");
             var indexBeforeChange = CurrentIndex;
             currentInstruction.Perform(this);
-            if (CurrentIndex == indexBeforeChange)
+            if (!IsWaiting && CurrentIndex == indexBeforeChange)
             {
                 CurrentIndex++;
             }
-            return currentInstruction;
         }
     }
 
@@ -160,29 +196,29 @@ namespace C__18
         public char Register { get; }
         public long? Value { get; }
 
-        public long GetValue(Synth synth)
+        public long GetValue(Program program)
         {
-            return Value.HasValue ? Value.Value : synth.GetRegisterValue(Register);
+            return Value.HasValue ? Value.Value : program.GetRegisterValue(Register);
         }
     }
 
     public interface IInstruction
     {
-        void Perform(Synth synth);
+        void Perform(Program program);
     }
 
-    public class SoundInst : IInstruction
+    public class SendInst : IInstruction
     {
-        public SoundInst(ValueReference frequency)
+        public SendInst(ValueReference frequency)
         {
-            this.Frequency = frequency;
+            this.Value = frequency;
         }
 
-        public ValueReference Frequency { get; }
+        public ValueReference Value { get; }
 
-        public void Perform(Synth synth)
+        public void Perform(Program synth)
         {
-            synth.Play(Frequency.GetValue(synth));
+            synth.Send(Value.GetValue(synth));
         }
     }
 
@@ -195,18 +231,18 @@ namespace C__18
 
     public class OpInst : IInstruction
     {
-        public OpInst(char register, Func<Synth, long, long> op)
+        public OpInst(char register, Func<Program, long, long> op)
         {
             this.Register = register;
             this.Op = op;
         }
 
         public char Register { get; }
-        public Func<Synth, long, long> Op { get; }
+        public Func<Program, long, long> Op { get; }
 
-        public void Perform(Synth synth)
+        public void Perform(Program program)
         {
-            synth.SetRegisterValue(Register, Op(synth, synth.GetRegisterValue(Register)));
+            program.SetRegisterValue(Register, Op(program, program.GetRegisterValue(Register)));
         }
     }
 
@@ -239,33 +275,37 @@ namespace C__18
         }
 
         public char Register { get; }
-        public long? RecalledValue { get; set; }
 
-        public void Perform(Synth synth)
+        public void Perform(Program program)
         {
-            if (synth.GetRegisterValue(Register) != 0)
+            var received = program.Read();
+            if (received.HasValue)
             {
-                this.RecalledValue = synth.LastFrequencyPlayed;
+                program.SetRegisterValue(Register, received.Value);
+            }
+            else
+            {
+                program.IsWaiting = true;
             }
         }
     }
 
     public class JumpInst : IInstruction
     {
-        public JumpInst(char register, ValueReference jumpLength)
+        public JumpInst(ValueReference register, ValueReference jumpLength)
         {
             this.Register = register;
             this.JumpLength = jumpLength;
         }
 
-        public char Register { get; }
+        public ValueReference Register { get; }
         public ValueReference JumpLength { get; }
 
-        public void Perform(Synth synth)
+        public void Perform(Program program)
         {
-            if (synth.GetRegisterValue(Register) > 0)
+            if (Register.GetValue(program) > 0)
             {
-                synth.CurrentIndex += JumpLength.GetValue(synth);
+                program.CurrentIndex += JumpLength.GetValue(program);
             }
         }
     }
