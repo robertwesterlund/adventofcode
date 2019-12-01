@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>_04</RootNamespace>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="input.data" />
+    <Compile Include="Program.fs" />
+    <None Include="sample.data" />
+    <None Include="unorderedsample.data" />
+  </ItemGroup>
+</Project>

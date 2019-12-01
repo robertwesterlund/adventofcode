@@ -1,0 +1,155 @@
+﻿// Learn more about F# at http://fsharp.org
+
+open System
+open System.IO
+open System.Text
+
+type PlantState =
+    | Planted
+    | Empty
+
+type Rule = 
+    {
+        Pattern : string
+        Verdict : PlantState
+    }    
+
+type Generation =
+    {
+        GenerationNumber : int64        
+        State : string
+        IndexOfPotZero : int
+    }
+
+let parseRules (data:seq<string>) = data |> Seq.map (fun s -> { Rule.Pattern = s.Substring(0, 5); Rule.Verdict = if s.[9] = '#' then Planted else Empty }) |> Seq.cache
+
+let missingRule = ["MISSI => ."] |> parseRules |> Seq.head
+let sampleInitialState = {Generation.GenerationNumber = 0L; Generation.State = "#..#.#..##......###...###"; Generation.IndexOfPotZero = 0}
+let realInitialState = {Generation.GenerationNumber = 0L; Generation.State = "##.##..#.#....#.##...###.##.#.#..###.#....##.###.#..###...#.##.#...#.#####.###.##..#######.####..#"; Generation.IndexOfPotZero = 0}
+let sampleRules = 
+    [
+        "...## => #"
+        "..#.. => #"
+        ".#... => #"
+        ".#.#. => #"
+        ".#.## => #"
+        ".##.. => #"
+        ".#### => #"
+        "#.#.# => #"
+        "#.### => #"
+        "##.#. => #"
+        "##.## => #"
+        "###.. => #"
+        "###.# => #"
+        "####. => #"
+    ] |> parseRules
+let realRules = 
+    [
+        ".##.. => #"
+        "#...# => ."
+        "####. => #"
+        "##..# => #"
+        "..##. => ."
+        ".###. => ."
+        "..#.# => ."
+        "##### => ."
+        "##.#. => #"
+        "...## => #"
+        ".#.#. => ."
+        "##.## => #"
+        "#.##. => ."
+        "#.... => ."
+        "#..## => ."
+        "..#.. => #"
+        ".#..# => #"
+        ".#.## => #"
+        "...#. => ."
+        ".#... => #"
+        "###.# => #"
+        "#..#. => #"
+        ".#### => #"
+        "#.### => #"
+        ".##.# => #"
+        "#.#.. => ."
+        "###.. => #"
+        "..... => ."
+        "##... => ."
+        "....# => ."
+        "#.#.# => #"
+        "..### => #"
+    ] |> parseRules
+
+
+let padPreviousGeneration (previousGeneration:Generation) =
+    let fiveEmpty = "....."
+    if (previousGeneration.State.StartsWith(fiveEmpty))
+    then
+        {
+            previousGeneration with
+                Generation.State = previousGeneration.State + (if previousGeneration.State.EndsWith(fiveEmpty) then "" else fiveEmpty)
+        }
+    else
+        {
+            previousGeneration with
+                Generation.State = fiveEmpty + previousGeneration.State + (if previousGeneration.State.EndsWith(fiveEmpty) then "" else fiveEmpty)
+                Generation.IndexOfPotZero = previousGeneration.IndexOfPotZero + 5
+        }
+
+let judge rules =
+    fun (previousGeneration:Generation) index -> 
+        let slice  = previousGeneration.State.Substring(index - 2, 5)
+        let foundRule = rules |> Seq.tryFind (fun r -> r.Pattern.Equals(slice, StringComparison.OrdinalIgnoreCase))
+        match foundRule with
+        | None -> Empty
+        | Some(rule) -> rule.Verdict
+
+let getNextGeneration (trainedJudge:Generation -> int -> PlantState) previousGeneration =
+    let padded = previousGeneration |> padPreviousGeneration
+    let goToCourtFor = trainedJudge padded
+    let builder = new StringBuilder()
+    builder.Append("..") |> ignore
+    for index in 2 .. padded.State.Length - 3 do
+        match goToCourtFor index with
+        | Planted -> builder.Append("#") |> ignore
+        | Empty -> builder.Append(".") |> ignore
+    builder.Append("..") |> ignore
+    {
+        padded with
+            Generation.GenerationNumber = padded.GenerationNumber + 1L
+            Generation.State = builder.ToString()
+    }
+
+let rec darwinObserve (evolutionaryTheory: Generation -> int -> PlantState) (generationsLeft:int64) (generation:Generation)  =
+    if (generationsLeft = 0L)
+    then
+        [generation]
+    else
+        let nextGeneration = getNextGeneration evolutionaryTheory generation
+        generation :: (nextGeneration |> darwinObserve evolutionaryTheory (generationsLeft - 1L))
+
+let getResults rules initialState generations =
+    let trainedJudge = judge rules
+    let survivalOfTheRules = darwinObserve trainedJudge generations
+    initialState |> survivalOfTheRules 
+
+let sumValue generation = 
+    generation.State |> Seq.mapi (fun index c -> if c = '#' then index - generation.IndexOfPotZero else 0) |> Seq.sum
+
+let sampleEvolution = getResults sampleRules sampleInitialState
+
+let realEvolution = getResults realRules realInitialState
+    
+[<EntryPoint>]
+let main argv =
+    sampleEvolution 20L |> Seq.iter (fun generation -> printfn "Generation %2i, State:  %A (pot zero index: %i)" generation.GenerationNumber generation.State generation.IndexOfPotZero)
+    sampleEvolution 20L |> Seq.rev |> Seq.head |> sumValue |> printfn "Value for generation: %i"
+    
+    realEvolution 20L |> Seq.iter (fun generation -> printfn "Generation %2i, State:  %A (pot zero index: %i)" generation.GenerationNumber generation.State generation.IndexOfPotZero)
+    realEvolution 20L |> Seq.rev |> Seq.head |> sumValue |> printfn "Value for generation: %i"
+    
+    //realEvolution 50000000000L |> Seq.iter (fun generation -> printfn "Generation %2i, State:  %A (pot zero index: %i)" generation.GenerationNumber generation.State generation.IndexOfPotZero)
+    printfn "Done with the real thing:"
+    realEvolution 50000000000L |> Seq.rev |> Seq.head |> sumValue |> printfn "Value for generation: %i"
+
+    printfn "Hello World from F#!"
+    0 // return an integer exit code

@@ -1,0 +1,65 @@
+﻿<Window x:Class="_17.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:_17"
+        mc:Ignorable="d"
+        Title="MainWindow" Height="450" Width="800">
+    <Window.Resources>
+        <local:GridEntryTypeToBrushValueConverter x:Key="typeToBrushConverter"/>
+    </Window.Resources>
+    <d:Window.DataContext>
+        <local:DesignTimeGridDataViewModel />
+    </d:Window.DataContext>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="auto"/>
+        </Grid.RowDefinitions>
+        <Viewbox>
+            <ItemsControl ItemsSource="{Binding ViewBox}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <Grid Loaded="Grid_Loaded">
+                            <!-- Grid and column definitions are currently set from code -->
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                        </Grid>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemContainerStyle>
+                    <Style TargetType="ContentPresenter">
+                        <Setter Property="Grid.Row" Value="{Binding ViewBoxY}" />
+                        <Setter Property="Grid.Column" Value="{Binding ViewBoxX}" />
+                    </Style>
+                </ItemsControl.ItemContainerStyle>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Rectangle MouseDown="HandleMouseOnRectangle" MouseEnter="HandleMouseOnRectangle" Fill="{Binding Type, Converter={StaticResource typeToBrushConverter}}" Margin="0.1" Height="100" Width="100" Stretch="UniformToFill"/>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Viewbox>
+        
+        <StackPanel Orientation="Horizontal" Grid.Row="1">
+            <Button x:Name="loadSampleDataButton" Content="Load Sample Data" FontSize="20" Click="LoadSampleData_Click"/>
+            <Button x:Name="loadBigTestDataButton" Content="Load Big Test Data (28246/23107)" FontSize="20" Click="LoadBigTestData_Click"/>
+            <Button x:Name="loadRealDataButton" Content="Load Real Data" FontSize="20" Click="LoadRealData_Click"/>
+            <Button x:Name="LoadSandboxDataButton" Content="Drawing Board" FontSize="20" Click="LoadSandbox_Click"/>
+            <Button x:Name="flowButton" Content="Flow" IsEnabled="False" FontSize="20" Click="Flow_Click"/>
+            <Button x:Name="flowPlayButton" Content="Flow Continously" IsEnabled="False" FontSize="20" Click="FlowPlay_Click" Margin="0,-16,0,22.4"/>
+            <Button x:Name="flowUntilDoneButton" Content="Flow Until Done" IsEnabled="false" FontSize="20" Click="FlowUntilDone_Click" />
+            <Button x:Name="saveStateToFile" Content="Save State" IsEnabled="false" FontSize="20" Click="SaveState_Click" />
+            <Label Content="Water Cell Count: "/>
+            <Label Content="{Binding WaterCellCount}" />
+        </StackPanel>
+    </Grid>
+</Window>
